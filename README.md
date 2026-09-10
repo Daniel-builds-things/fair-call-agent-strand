@@ -1,8 +1,8 @@
 # Fair Call Agent — Agentic Shift Scheduling
 
-> **micro1 Agentic Workflows Hackathon** — Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
+> **Devpost — AI Agent Orchestration Showcase** — Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
 
-An agentic constraint-reasoning layer on top of a deterministic LRU scheduler. Managers give natural language instructions; the agent parses, reasons about trade-offs, and produces schedules that honor constraints.
+An agentic constraint-reasoning layer on top of a deterministic LRU scheduler, powered by the AWS Strands Agents SDK. Managers give natural language instructions; the agent parses, reasons about trade-offs, and produces schedules that honor constraints.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ npm run demo
 npm run eval
 ```
 
-No API keys, no external services — pure TypeScript.
+Works without API keys — regex parsing provides full functionality. Set `GROQ_API_KEY` to enable optional LLM-powered semantic parsing for complex natural language constraints.
 
 ## Architecture
 

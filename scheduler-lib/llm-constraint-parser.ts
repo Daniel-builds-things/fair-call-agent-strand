@@ -96,7 +96,7 @@ Return a JSON array only.`;
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userPrompt },
       ],
-      model: "qwen/qwen3-32b",
+      model: "llama-3.3-70b-versatile",
       temperature: 0,
       max_tokens: 2000,
     });

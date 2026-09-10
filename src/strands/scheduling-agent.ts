@@ -3,17 +3,33 @@
 // The agent accepts natural language requests and delegates to the scheduler tool.
 
 import { Agent, type AgentConfig } from "@strands-agents/sdk";
+import { OpenAIModel } from "@strands-agents/sdk/models/openai";
 import { fairScheduleTool } from "./fair-schedule-tool";
 
 /**
  * Creates a Fair Call scheduling agent powered by the Strands Agents SDK.
+ * Uses an OpenAI-compatible model provider (e.g., NetMind LLM API).
+ *
+ * Required env vars:
+ *   OPENAI_API_KEY    - Your NetMind LLM API key
+ *   OPENAI_BASE_URL   - NetMind API base URL (e.g., https://api.netmind.ai/v1)
  *
  * @param options - Optional AgentConfig overrides (model, hooks, etc.)
  * @returns Configured Strands Agent with fair-schedule tool
  */
 export function createFairCallAgent(options?: Partial<AgentConfig>): Agent {
+  const openaiModel = new OpenAIModel({
+    api: "chat",
+    modelId: process.env.OPENAI_MODEL_ID || "gpt-4o",
+    apiKey: process.env.OPENAI_API_KEY,
+    clientConfig: {
+      baseURL: process.env.OPENAI_BASE_URL,
+    },
+    maxTokens: 4096,
+  });
+
   return new Agent({
-    model: options?.model ?? "global.anthropic.claude-sonnet-4-20250514-v1:0",
+    model: options?.model ?? openaiModel,
     systemPrompt: options?.systemPrompt ??
       `You are a Fair Call scheduling assistant. You help healthcare managers and administrators create fair, constraint-aware shift schedules.
 
