@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 // Default staff matching the demo
 const defaultStaff = [
@@ -48,12 +48,55 @@ interface ScheduleError {
   message: string;
 }
 
+interface ConstraintDecision {
+  constraintId: string;
+  applied: boolean;
+  reasoning: string;
+}
+
 interface ScheduleResult {
   assignments: DayAssignment[];
   stats: StaffStats[];
   errors: ScheduleError[];
   warnings: string[];
-  constraintDecisions?: { constraintId: string; applied: boolean; reasoning: string }[];
+  constraintDecisions?: ConstraintDecision[];
+}
+
+// AI Feature types
+interface AssignmentExplanation {
+  staffId: string;
+  staffName: string;
+  totalShifts: number;
+  shiftBreakdown: string;
+  reasoning: string;
+  constraintImpact: string[];
+  fairnessNote: string;
+}
+
+interface ConflictAnalysis {
+  id: string;
+  severity: "high" | "medium" | "low";
+  type: string;
+  description: string;
+  affectedStaff: string[];
+  affectedDates: string[];
+  suggestions: string[];
+  tradeOffAnalysis: string;
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface StaffingRecommendation {
+  id: string;
+  category: string;
+  priority: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  impact: string;
+  actionItems: string[];
 }
 
 const SLOT_COLORS: Record<string, string> = {
@@ -91,13 +134,30 @@ export default function Home() {
   const [result, setResult] = useState<ScheduleResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"calendar" | "stats" | "constraints">("calendar");
+  const [activeTab, setActiveTab] = useState<string>("calendar");
   const [newStaffName, setNewStaffName] = useState("");
+
+  // AI feature states
+  const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<{ staffExplanations: AssignmentExplanation[]; overallSummary: string; keyInsights: string[] } | null>(null);
+  const [conflicts, setConflicts] = useState<{ conflicts: ConflictAnalysis[]; overallRisk: string } | null>(null);
+  const [predictions, setPredictions] = useState<{ recommendations: StaffingRecommendation[]; overallHealth: string; burnoutRiskStaff: { name: string; reason: string; risk: string }[] } | null>(null);
+
+  // Query chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [queryInput, setQueryInput] = useState("");
+  const [queryLoading, setQueryLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const handleGenerate = useCallback(async () => {
     setLoading(true);
     setError(null);
     setResult(null);
+    setExplanation(null);
+    setConflicts(null);
+    setPredictions(null);
+    setChatMessages([]);
 
     try {
       const staffList = staff.filter((s) => s.isActive);
@@ -143,6 +203,128 @@ export default function Home() {
     setStaff(staff.map((s) => (s.id === id ? { ...s, isActive: !s.isActive } : s)));
   };
 
+  // ─── AI Feature Handlers ─────────────────────────────────────────────────
+
+  const getSchedulePayload = () => ({
+    schedule: {
+      assignments: result?.assignments || [],
+      stats: result?.stats || [],
+      errors: result?.errors || [],
+    },
+    staff: staff.filter((s) => s.isActive),
+    constraints: constraints.split("\n").map((l) => l.trim()).filter((l) => l.length > 0),
+    month,
+  });
+
+  const handleExplain = async () => {
+    setAiLoading("explain");
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...getSchedulePayload(), action: "explain" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setExplanation(data.data);
+      } else {
+        setAiError(data.error || "Failed to generate explanation");
+      }
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleConflicts = async () => {
+    setAiLoading("conflicts");
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...getSchedulePayload(), action: "conflicts" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setConflicts(data.data);
+      } else {
+        setAiError(data.error || "Failed to analyze conflicts");
+      }
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handlePredict = async () => {
+    setAiLoading("predict");
+    setAiError(null);
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...getSchedulePayload(), action: "predict" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPredictions(data.data);
+      } else {
+        setAiError(data.error || "Failed to generate predictions");
+      }
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleQuery = async () => {
+    if (!queryInput.trim()) return;
+    const userMsg: ChatMessage = { role: "user", content: queryInput };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setQueryLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...getSchedulePayload(),
+          action: "query",
+          query: queryInput,
+          conversationHistory: chatMessages.slice(-6),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setChatMessages((prev) => [...prev, { role: "assistant", content: data.data.answer }]);
+      } else {
+        setAiError(data.error || "Query failed");
+      }
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setQueryLoading(false);
+      setQueryInput("");
+    }
+  };
+
+  const allTabs = ["calendar", "stats", "constraints", "explain", "conflicts", "query", "predict"];
+  const tabLabels: Record<string, string> = {
+    calendar: "Calendar",
+    stats: "Stats",
+    constraints: "Constraints",
+    explain: "AI Explain",
+    conflicts: "AI Conflicts",
+    query: "AI Query",
+    predict: "AI Predict",
+  };
+
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", padding: "20px 16px" }}>
       {/* Header */}
@@ -151,7 +333,7 @@ export default function Home() {
           Fair Call Agent — Live Scheduler
         </h1>
         <p style={{ margin: 0, color: "#666", fontSize: 14 }}>
-          Natural language constraints → AI-powered schedule generation
+          Natural language constraints → AI-powered schedule generation with intelligent analysis
         </p>
       </div>
 
@@ -336,27 +518,31 @@ export default function Home() {
               </div>
 
               {/* Tabs */}
-              <div style={{ display: "flex", borderBottom: "1px solid #eee" }}>
-                {(["calendar", "stats", "constraints"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    style={{
-                      flex: 1,
-                      padding: "10px 16px",
-                      border: "none",
-                      borderBottom: activeTab === tab ? "3px solid #3b82f6" : "3px solid transparent",
-                      background: activeTab === tab ? "#eff6ff" : "transparent",
-                      cursor: "pointer",
-                      fontSize: 14,
-                      fontWeight: activeTab === tab ? 700 : 400,
-                      color: activeTab === tab ? "#3b82f6" : "#666",
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {tab}
-                  </button>
-                ))}
+              <div style={{ display: "flex", borderBottom: "1px solid #eee", flexWrap: "wrap" }}>
+                {allTabs.map((tab) => {
+                  const isAi = tab === "explain" || tab === "conflicts" || tab === "query" || tab === "predict";
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      style={{
+                        flex: 1,
+                        minWidth: 80,
+                        padding: "10px 12px",
+                        border: "none",
+                        borderBottom: activeTab === tab ? `3px solid ${isAi ? "#8b5cf6" : "#3b82f6"}` : "3px solid transparent",
+                        background: activeTab === tab ? (isAi ? "#f5f3ff" : "#eff6ff") : "transparent",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        fontWeight: activeTab === tab ? 700 : 400,
+                        color: activeTab === tab ? (isAi ? "#7c3aed" : "#3b82f6") : "#666",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {tabLabels[tab]}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Tab Content */}
@@ -370,6 +556,41 @@ export default function Home() {
                 {activeTab === "constraints" && (
                   <ConstraintsView decisions={result.constraintDecisions || []} errors={result.errors} warnings={result.warnings} />
                 )}
+                {activeTab === "explain" && (
+                  <ExplainView
+                    explanation={explanation}
+                    loading={aiLoading === "explain"}
+                    onExplain={handleExplain}
+                    error={aiError}
+                  />
+                )}
+                {activeTab === "conflicts" && (
+                  <ConflictsView
+                    conflicts={conflicts}
+                    loading={aiLoading === "conflicts"}
+                    onAnalyze={handleConflicts}
+                    error={aiError}
+                  />
+                )}
+                {activeTab === "query" && (
+                  <QueryView
+                    messages={chatMessages}
+                    onSend={handleQuery}
+                    loading={queryLoading}
+                    input={queryInput}
+                    onInputChange={setQueryInput}
+                    error={aiError}
+                    chatEndRef={chatEndRef}
+                  />
+                )}
+                {activeTab === "predict" && (
+                  <PredictView
+                    predictions={predictions}
+                    loading={aiLoading === "predict"}
+                    onPredict={handlePredict}
+                    error={aiError}
+                  />
+                )}
               </div>
             </div>
           )}
@@ -378,6 +599,8 @@ export default function Home() {
     </div>
   );
 }
+
+// ─── Calendar View ─────────────────────────────────────────────────────────────
 
 function CalendarView({ assignments, staff }: { assignments: DayAssignment[]; staff: typeof defaultStaff }) {
   return (
@@ -403,7 +626,6 @@ function CalendarView({ assignments, staff }: { assignments: DayAssignment[]; st
                 {(["morning", "afternoon", "night"] as const).map((slot) => {
                   const staffId = a[slot];
                   const name = staffId ? getStaffName(staff, staffId) : "—";
-                  const s = staff.find((x) => x.id === staffId);
                   const color = SLOT_COLORS[slot];
                   return (
                     <td key={slot} style={{ padding: "6px 8px", borderBottom: "1px solid #f0f0f0", textAlign: "center" }}>
@@ -435,6 +657,8 @@ function CalendarView({ assignments, staff }: { assignments: DayAssignment[]; st
     </div>
   );
 }
+
+// ─── Stats View ────────────────────────────────────────────────────────────────
 
 function StatsView({ stats }: { stats: StaffStats[] }) {
   const sorted = [...stats].sort((a, b) => b.totalCount - a.totalCount);
@@ -478,7 +702,9 @@ function StatsView({ stats }: { stats: StaffStats[] }) {
   );
 }
 
-function ConstraintsView({ decisions, errors, warnings }: { decisions: { constraintId: string; applied: boolean; reasoning: string }[]; errors: ScheduleError[]; warnings: string[] }) {
+// ─── Constraints View ──────────────────────────────────────────────────────────
+
+function ConstraintsView({ decisions, errors, warnings }: { decisions: ConstraintDecision[]; errors: ScheduleError[]; warnings: string[] }) {
   return (
     <div>
       <h3 style={{ margin: "0 0 16px", fontSize: 16 }}>Constraint Decisions</h3>
@@ -511,6 +737,336 @@ function ConstraintsView({ decisions, errors, warnings }: { decisions: { constra
           ))}
         </>
       )}
+    </div>
+  );
+}
+
+// ─── AI Explain View ───────────────────────────────────────────────────────────
+
+function ExplainView({ explanation, loading, onExplain, error }: {
+  explanation: { staffExplanations: AssignmentExplanation[]; overallSummary: string; keyInsights: string[] } | null;
+  loading: boolean;
+  onExplain: () => void;
+  error: string | null;
+}) {
+  if (!explanation && !loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div>
+        <h3 style={{ margin: "0 0 8px", color: "#1a1a2e" }}>AI Schedule Explanation</h3>
+        <p style={{ color: "#666", fontSize: 14, marginBottom: 16 }}>
+          The AI analyzes WHY each person got their shifts — not just the numbers.
+        </p>
+        <button
+          onClick={onExplain}
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "#7c3aed", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+        >
+          Generate Explanation
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+        <p style={{ color: "#666" }}>AI is analyzing the schedule...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div style={{ padding: 12, background: "#fef2f2", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>{error}</div>;
+  }
+
+  return (
+    <div>
+      <div style={{ padding: 16, background: "#f5f3ff", borderRadius: 8, marginBottom: 20, borderLeft: "4px solid #7c3aed" }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 16, color: "#7c3aed" }}>Overall Summary</h3>
+        <p style={{ margin: 0, fontSize: 14, color: "#333" }}>{explanation!.overallSummary}</p>
+        {explanation!.keyInsights.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <strong style={{ fontSize: 13 }}>Key Insights:</strong>
+            <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 13, color: "#555" }}>
+              {explanation!.keyInsights.map((insight, i) => (
+                <li key={i}>{insight}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>Per-Staff Explanations</h3>
+      {explanation!.staffExplanations.map((exp) => (
+        <div key={exp.staffId} style={{ padding: 14, marginBottom: 10, borderRadius: 8, background: "#fafafa", borderLeft: "4px solid #3b82f6" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <strong style={{ fontSize: 15 }}>{exp.staffName}</strong>
+            <span style={{ fontSize: 12, color: "#666", background: "#e0e7ff", padding: "2px 8px", borderRadius: 10 }}>{exp.fairnessNote}</span>
+          </div>
+          <p style={{ margin: "0 0 6px", fontSize: 13, color: "#333" }}>{exp.shiftBreakdown}</p>
+          <p style={{ margin: "0 0 6px", fontSize: 13, color: "#555" }}>{exp.reasoning}</p>
+          {exp.constraintImpact.length > 0 && (
+            <div style={{ fontSize: 12, color: "#666" }}>
+              Constraints: {exp.constraintImpact.join(" • ")}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── AI Conflicts View ─────────────────────────────────────────────────────────
+
+function ConflictsView({ conflicts, loading, onAnalyze, error }: {
+  conflicts: { conflicts: ConflictAnalysis[]; overallRisk: string } | null;
+  loading: boolean;
+  onAnalyze: () => void;
+  error: string | null;
+}) {
+  if (!conflicts && !loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
+        <h3 style={{ margin: "0 0 8px", color: "#1a1a2e" }}>AI Conflict Analysis</h3>
+        <p style={{ color: "#666", fontSize: 14, marginBottom: 16 }}>
+          Detects constraint conflicts, unfilled slots, and imbalances — with actionable suggestions.
+        </p>
+        <button
+          onClick={onAnalyze}
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "#f59e0b", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+        >
+          Analyze Conflicts
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+        <p style={{ color: "#666" }}>AI is analyzing conflicts...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div style={{ padding: 12, background: "#fef2f2", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>{error}</div>;
+  }
+
+  const data = conflicts!;
+  const riskColor = data.overallRisk === "high" ? "#ef4444" : data.overallRisk === "medium" ? "#f59e0b" : "#10b981";
+
+  if (data.conflicts.length === 0) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+        <h3 style={{ margin: "0 0 8px", color: "#10b981" }}>No Conflicts Detected</h3>
+        <p style={{ color: "#666", fontSize: 14 }}>All constraints are compatible and all slots are filled.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ padding: 12, background: riskColor + "18", borderRadius: 8, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 18 }}>{data.overallRisk === "high" ? "🔴" : data.overallRisk === "medium" ? "🟡" : "🟢"}</span>
+        <strong style={{ fontSize: 14, color: riskColor, textTransform: "capitalize" }}>{data.overallRisk} Risk</strong>
+        <span style={{ fontSize: 13, color: "#666" }}>— {data.conflicts.length} conflict(s) detected</span>
+      </div>
+
+      {data.conflicts.map((c) => {
+        const sevColor = c.severity === "high" ? "#ef4444" : c.severity === "medium" ? "#f59e0b" : "#10b981";
+        return (
+          <div key={c.id} style={{ padding: 14, marginBottom: 12, borderRadius: 8, background: "#fafafa", borderLeft: `4px solid ${sevColor}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <strong style={{ fontSize: 14, textTransform: "capitalize", color: sevColor }}>{c.type.replace(/_/g, " ")}</strong>
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: sevColor + "20", color: sevColor, fontWeight: 600 }}>{c.severity}</span>
+            </div>
+            <p style={{ margin: "0 0 8px", fontSize: 13, color: "#333" }}>{c.description}</p>
+            {c.affectedStaff.length > 0 && (
+              <div style={{ fontSize: 12, color: "#666", marginBottom: 6 }}>
+                Affected: {c.affectedStaff.join(", ")}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: "#555", marginBottom: 8 }}>
+              <strong>Trade-off:</strong> {c.tradeOffAnalysis}
+            </div>
+            <div>
+              <strong style={{ fontSize: 12, color: "#333" }}>Suggestions:</strong>
+              <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 12, color: "#555" }}>
+                {c.suggestions.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── AI Query View ─────────────────────────────────────────────────────────────
+
+function QueryView({ messages, onSend, loading, input, onInputChange, error, chatEndRef }: {
+  messages: ChatMessage[];
+  onSend: () => void;
+  loading: boolean;
+  input: string;
+  onInputChange: (v: string) => void;
+  error: string | null;
+  chatEndRef: React.RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: 500 }}>
+      <h3 style={{ margin: "0 0 12px", fontSize: 16 }}>💬 Ask About the Schedule</h3>
+      <p style={{ margin: "0 0 12px", fontSize: 13, color: "#666" }}>
+        Try: "Who&apos;s working nights?", "How many shifts did Ada get?", "Are there any conflicts?"
+      </p>
+
+      {/* Chat messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: 12, background: "#f8fafc", borderRadius: 8, marginBottom: 12 }}>
+        {messages.length === 0 && (
+          <p style={{ textAlign: "center", color: "#999", fontSize: 14, padding: 32 }}>
+            No questions yet. Ask something about the schedule!
+          </p>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{ marginBottom: 10, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+            <div style={{
+              maxWidth: "80%",
+              padding: "10px 14px",
+              borderRadius: 12,
+              background: m.role === "user" ? "#3b82f6" : "#fff",
+              color: m.role === "user" ? "#fff" : "#333",
+              fontSize: 13,
+              whiteSpace: "pre-wrap",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+            }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{ fontSize: 13, color: "#666", padding: "4px 0" }}>Thinking...</div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      {error && <div style={{ padding: 8, background: "#fef2f2", borderRadius: 6, color: "#dc2626", fontSize: 12, marginBottom: 8 }}>{error}</div>}
+
+      {/* Input */}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={input}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !loading && onSend()}
+          placeholder="Ask a question about the schedule..."
+          disabled={loading}
+          style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+        />
+        <button
+          onClick={onSend}
+          disabled={loading || !input.trim()}
+          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: loading || !input.trim() ? "#94a3b8" : "#7c3aed", color: "#fff", fontSize: 13, fontWeight: 600, cursor: loading || !input.trim() ? "not-allowed" : "pointer" }}
+        >
+          {loading ? "..." : "Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AI Predict View ───────────────────────────────────────────────────────────
+
+function PredictView({ predictions, loading, onPredict, error }: {
+  predictions: { recommendations: StaffingRecommendation[]; overallHealth: string; burnoutRiskStaff: { name: string; reason: string; risk: string }[] } | null;
+  loading: boolean;
+  onPredict: () => void;
+  error: string | null;
+}) {
+  if (!predictions && !loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🔮</div>
+        <h3 style={{ margin: "0 0 8px", color: "#1a1a2e" }}>Predictive Staffing</h3>
+        <p style={{ color: "#666", fontSize: 14, marginBottom: 16 }}>
+          AI analyzes burnout risk, understaffing, and optimization opportunities.
+        </p>
+        <button
+          onClick={onPredict}
+          style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "#10b981", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+        >
+          Generate Predictions
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 32 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+        <p style={{ color: "#666" }}>AI is generating predictions...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div style={{ padding: 12, background: "#fef2f2", borderRadius: 8, color: "#dc2626", fontSize: 13 }}>{error}</div>;
+  }
+
+  const data = predictions!;
+  const healthColor = data.overallHealth === "critical" ? "#ef4444" : data.overallHealth === "warning" ? "#f59e0b" : "#10b981";
+
+  return (
+    <div>
+      {/* Health badge */}
+      <div style={{ padding: 12, background: healthColor + "18", borderRadius: 8, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 18 }}>{data.overallHealth === "critical" ? "🔴" : data.overallHealth === "warning" ? "🟡" : "🟢"}</span>
+        <strong style={{ fontSize: 14, color: healthColor, textTransform: "capitalize" }}>Overall Health: {data.overallHealth}</strong>
+      </div>
+
+      {/* Burnout risk */}
+      {data.burnoutRiskStaff.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ margin: "0 0 10px", fontSize: 15, color: "#ef4444" }}>⚠️ Burnout Risk Staff</h3>
+          {data.burnoutRiskStaff.map((b, i) => (
+            <div key={i} style={{ padding: 10, marginBottom: 6, borderRadius: 6, background: "#fef2f2", borderLeft: "4px solid #ef4444" }}>
+              <strong style={{ fontSize: 13 }}>{b.name}</strong>
+              <span style={{ marginLeft: 8, fontSize: 11, padding: "1px 6px", borderRadius: 8, background: b.risk === "high" ? "#ef4444" : b.risk === "medium" ? "#f59e0b" : "#10b981", color: "#fff" }}>{b.risk}</span>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#666" }}>{b.reason}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Recommendations */}
+      <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Recommendations</h3>
+      {data.recommendations.map((r) => {
+        const priColor = r.priority === "high" ? "#ef4444" : r.priority === "medium" ? "#f59e0b" : "#10b981";
+        return (
+          <div key={r.id} style={{ padding: 14, marginBottom: 10, borderRadius: 8, background: "#fafafa", borderLeft: `4px solid ${priColor}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <strong style={{ fontSize: 14, textTransform: "capitalize" }}>{r.title}</strong>
+              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: priColor + "20", color: priColor, fontWeight: 600 }}>{r.priority}</span>
+            </div>
+            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#555" }}>{r.description}</p>
+            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#999" }}>Impact: {r.impact}</p>
+            <div>
+              <strong style={{ fontSize: 12 }}>Action items:</strong>
+              <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 12, color: "#555" }}>
+                {r.actionItems.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
