@@ -7,6 +7,7 @@
 // The LLM analyzes the schedule data and answers in natural language.
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { StaffMember, Constraint, DayAssignment, StaffStats } from "../../../scheduler-lib/types";
 
 export interface ScheduleQueryResult {
@@ -30,13 +31,12 @@ export async function queryScheduleWithAI(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = []
 ): Promise<ScheduleQueryResult> {
   const startTime = Date.now();
-  const apiKey = process.env.GROQ_API_KEY;
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
 
-  if (!apiKey) {
+  if (!groqApiKey && !openaiApiKey) {
     return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
   }
-
-  const groq = new Groq({ apiKey });
 
   // Build schedule context
   const scheduleContext = {
@@ -96,34 +96,90 @@ Return a JSON object:
 
 Return ONLY the JSON object.`;
 
+  const messages = [
+    { role: "system" as const, content: systemPrompt },
+    ...conversationHistory.map((m) => ({ role: m.role as const, content: m.content })),
+    { role: "user" as const, content: userPrompt },
+  ];
+
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.2,
-      max_tokens: 1500,
-    });
-
-    const content = response.choices[0]?.message?.content?.trim();
-    if (!content) {
-      return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
+    // Try Groq first if available
+    if (groqApiKey) {
+      const groq = new Groq({ apiKey: groqApiKey });
+      return await callGroq(groq, messages, query, assignments, stats, constraints, staff, month, startTime);
     }
-
-    const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    const parsed = JSON.parse(jsonStr);
-
-    return {
-      ...parsed,
-      processingTimeMs: Date.now() - startTime,
-    };
+    // Fallback to OpenAI
+    return await callOpenAI(openaiApiKey!, messages, query, assignments, stats, constraints, staff, month, startTime);
   } catch (err) {
     console.error("[AI Query] Failed, using fallback:", err);
     return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
   }
+}
+
+async function callGroq(
+  groq: Groq,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  query: string,
+  assignments: DayAssignment[],
+  stats: StaffStats[],
+  constraints: Constraint[],
+  staff: StaffMember[],
+  month: string,
+  startTime: number
+): Promise<ScheduleQueryResult> {
+  const response = await groq.chat.completions.create({
+    messages,
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.2,
+    max_tokens: 1500,
+  });
+
+  return parseLLMResponse(response.choices[0]?.message?.content, query, assignments, stats, constraints, staff, month, startTime);
+}
+
+async function callOpenAI(
+  apiKey: string,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  query: string,
+  assignments: DayAssignment[],
+  stats: StaffStats[],
+  constraints: Constraint[],
+  staff: StaffMember[],
+  month: string,
+  startTime: number
+): Promise<ScheduleQueryResult> {
+  const openai = new OpenAI({ apiKey });
+  const response = await openai.chat.completions.create({
+    messages,
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    max_tokens: 1500,
+  });
+
+  return parseLLMResponse(response.choices[0]?.message?.content, query, assignments, stats, constraints, staff, month, startTime);
+}
+
+function parseLLMResponse(
+  content: string | undefined,
+  query: string,
+  assignments: DayAssignment[],
+  stats: StaffStats[],
+  constraints: Constraint[],
+  staff: StaffMember[],
+  month: string,
+  startTime: number
+): ScheduleQueryResult {
+  if (!content) {
+    return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
+  }
+
+  const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonStr);
+
+  return {
+    ...parsed,
+    processingTimeMs: Date.now() - startTime,
+  };
 }
 
 // ─── Fallback Query Answer (no LLM) ───────────────────────────────────────────
