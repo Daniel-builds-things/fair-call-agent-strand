@@ -71,6 +71,7 @@ export type ConstraintType =
   | "availability"       // staff is only available on specific days of week
   | "role"               // staff has a role (e.g., "senior") for priority
   | "coverage"           // minimum staff per shift slot
+  | "max_total_slots"    // global cap on total filled slots across the schedule
   ;
 
 export type ConstraintPriority = "hard" | "soft" | "preference";

@@ -58,6 +58,11 @@ Supported constraint types and their JSON shapes:
 14. role: Staff has a role
     {"type":"role","staff":"Name","metadata":{"role":"senior|junior|lead"},"priority":"preference"}
 
+15. max_total_slots: Global cap on total filled slots across the entire schedule
+    {"type":"max_total_slots","value":N,"priority":"hard"}
+    Example: "fill only 10 slots" → {"type":"max_total_slots","value":10,"priority":"hard"}
+    Example: "limit the schedule to 15 shifts total" → {"type":"max_total_slots","value":15,"priority":"hard"}
+
 The current month context will be provided. Use it to resolve relative dates like "Aug 5" or "next Monday".
 
 Return ONLY a JSON array of constraint objects. If you cannot parse a constraint, return null for that item.
@@ -149,7 +154,7 @@ Return a JSON array only.`;
 
         return constraint;
       })
-      .filter((c: Constraint) => c.staffId || c.type === "coverage"); // filter unresolvable
+      .filter((c: Constraint) => c.staffId || c.type === "coverage" || c.type === "max_total_slots"); // filter unresolvable
   } catch (err) {
     console.error("[LLM Parser] Failed to parse constraints:", err);
     return []; // Fall back to regex on error

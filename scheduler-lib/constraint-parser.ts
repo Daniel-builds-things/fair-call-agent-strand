@@ -80,6 +80,7 @@ function parseSingleConstraint(
     parseBalance,
     parseCoverage,
     parseRole,
+    parseMaxTotalSlots,
   ];
 
   for (const parser of parsers) {
@@ -689,6 +690,35 @@ function parseRole(
     staffId: staffMember.id,
     staffName: staffMember.name,
     metadata: { role: match[3].toLowerCase() },
+    sourceText: text,
+  };
+}
+
+function parseMaxTotalSlots(
+  text: string,
+  lower: string,
+  _staff: StaffMember[],
+  _month: Date
+): Constraint | null {
+  // "fill only {N} slots"
+  // "limit to {N} slots"
+  // "only fill {N} slots"
+  // "maximum {N} slots total"
+  // "fill just {N} slots"
+  const match = text.match(
+    /(?:fill\s+only|only\s+fill|limit\s+(?:to|the\s+schedule\s+to)|maximum|max)\s+(\d+)\s+(?:total\s+)?slots?/i
+  ) || text.match(
+    /(?:fill\s+just|just\s+fill|use\s+only)\s+(\d+)\s+slots?/i
+  );
+  if (!match) return null;
+
+  return {
+    id: nextId(),
+    type: "max_total_slots",
+    priority: "hard",
+    staffId: "",
+    staffName: "All staff",
+    value: parseInt(match[1], 10),
     sourceText: text,
   };
 }

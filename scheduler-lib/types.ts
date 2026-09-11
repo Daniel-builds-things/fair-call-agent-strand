@@ -68,7 +68,8 @@ export type ConstraintType =
   | "specific_shift"
   | "availability"
   | "role"
-  | "coverage";
+  | "coverage"
+  | "max_total_slots";
 
 export type ConstraintPriority = "hard" | "soft" | "preference";
 

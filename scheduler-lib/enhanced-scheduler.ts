@@ -104,6 +104,8 @@ export function generateAgentSchedule(
   const availabilityDow = new Map<string, Set<number>>();
   // Preferred shifts: staffId -> Set<slot>
   const preferredShifts = new Map<string, Set<ShiftSlot>>();
+  // Global cap on total filled slots
+  let maxTotalSlots: number | undefined;
 
   for (const c of constraints) {
     switch (c.type) {
@@ -260,6 +262,15 @@ export function generateAgentSchedule(
           constraintId: c.id,
           applied: true,
           reasoning: `Preference: Balance shift types for ${c.staffName}`,
+        });
+        break;
+      }
+      case "max_total_slots": {
+        maxTotalSlots = c.value;
+        constraintDecisions.push({
+          constraintId: c.id,
+          applied: true,
+          reasoning: `Hard constraint: Schedule capped at ${c.value} total slots`,
         });
         break;
       }
@@ -581,9 +592,16 @@ export function generateAgentSchedule(
   const allSlots = getAllSlots();
   allSlots.sort((a, b) => a.date.localeCompare(b.date));
 
+  let totalFilledSlots = 0;
+
   for (const slotInfo of allSlots) {
     if (globalIterations++ >= MAX_GLOBAL_ITERATIONS) {
       warnings.push(`[SAFETY] Scheduling stopped early (${globalIterations} iterations)`);
+      break;
+    }
+
+    // Enforce global slot cap
+    if (maxTotalSlots !== undefined && totalFilledSlots >= maxTotalSlots) {
       break;
     }
 
@@ -629,6 +647,9 @@ export function generateAgentSchedule(
 
     if (!assigned) {
       assignShift(eligible[0].id, slotInfo.date, slotInfo.slot);
+      totalFilledSlots++;
+    } else {
+      totalFilledSlots++;
     }
   }
 
