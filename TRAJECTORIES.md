@@ -1,4 +1,4 @@
-# Agent Trajectories — Fair Call Agent
+# Agent Trajectories: Fair Call Agent
 
 > micro1 Agentic Workflows Hackathon
 > Representative execution traces showing the agent's reasoning step-by-step.
@@ -57,13 +57,13 @@ No `specific_shift` constraints in this case, so no pre-assignments.
 
 For each slot (date × shift type), the agent:
 
-1. **Builds eligible staff list** — filters out anyone violating hard constraints:
+1. **Builds eligible staff list**: filters out anyone violating hard constraints:
    - On Aug 14, 15, 16: Ada is excluded from ALL shifts (time-off)
    - On other dates: all 8 staff eligible
-2. **Scores eligible staff** — applies soft constraint bonuses:
+2. **Scores eligible staff**: applies soft constraint bonuses:
    - When filling a morning slot: Chidi gets +10 (preferred shift)
    - When filling any slot: staff with more days since last assignment rank higher (LRU)
-3. **Assigns best candidate** — highest-scoring eligible staff member
+3. **Assigns best candidate**: highest-scoring eligible staff member
 
 **Key decision moments:**
 
@@ -108,14 +108,14 @@ Fairness Analysis:
   Standard deviation: 1.2 shifts
 
 Constraint Compliance:
-  ✓ Time-off (Ada, Aug 14-16): Fully honored — 0 violations
-  ✓ Preferred (Chidi, mornings): 80% match — strong preference alignment
+  Time-off (Ada, Aug 14-16): Fully honored - 0 violations
+  Preferred (Chidi, mornings): 80% match - strong preference alignment
 
 Anomalies: None detected
 
 Hot Take: When one staff member takes time off, the remaining 7 absorb
 the workload with minimal fairness disruption. The LRU algorithm naturally
-compensates — the agent's constraint filtering just ensures it doesn't
+compensates - the agent's constraint filtering just ensures it doesn't
 assign to the absent person in the first place.
 ```
 
@@ -152,14 +152,14 @@ noNightToMorning: Set("Ibrahim")
 availableDays:    { "Kemi" → Set(Mon, Tue, Wed, Thu, Fri) }
 ```
 
-### Step 3: Main Scheduling Loop — Key Decision Points
+### Step 3: Main Scheduling Loop - Key Decision Points
 
 **Weekend slots (Saturdays & Sundays in August 2025):**
 ```
-Aug 2 (Sat) — Kemi excluded (weekday-only availability)
-Aug 3 (Sun) — Kemi excluded
-Aug 9 (Sat) — Kemi excluded
-Aug 10 (Sun) — Kemi excluded + Ada excluded (time-off starts)
+Aug 2 (Sat) - Kemi excluded (weekday-only availability)
+Aug 3 (Sun) - Kemi excluded
+Aug 9 (Sat) - Kemi excluded
+Aug 10 (Sun) - Kemi excluded + Ada excluded (time-off starts)
 ...
 
 Baseline behavior on Aug 3 (Sun):
@@ -196,7 +196,7 @@ Agent: Chedi gets 18 shifts ✓ (respects cap)
 
 ```
 Constraint       Baseline    Agent
-Time-off (Ada)   ✓*          ✓     (* coincidental — LRU happened to skip)
+Time-off (Ada)   ✓*          ✓     (* coincidental - LRU happened to skip)
 Max shifts       ✓*          ✓     (* LRU distributes evenly)
 Morning pref     ✗           ✓     (Baseline: 20%, Agent: 75%)
 No N→M (Ibrahim) ✓*          ✓     (* LRU naturally avoids this)
@@ -377,7 +377,7 @@ For Kemi:
   honoring their stated preference.
 
   Kemi's 9 shifts are below average because weekend unavailability
-  removes 18 of 93 total slots. This is not a fairness issue — it's
+  removes 18 of 93 total slots. This is not a fairness issue - it's
   a direct consequence of reduced available days."
 ```
 
@@ -387,19 +387,19 @@ For Kemi:
 
 ### Step 1: Conflict Scan
 ```
-Pass 1 — Time-off violations:
+Pass 1: Time-off violations:
   ✗ Ada scheduled Aug 12 Night (requested time off Aug 10-14)
   Severity: HIGH
 
-Pass 2 — Unfilled slots:
+Pass 2: Unfilled slots:
   ✗ Aug 20 Night: only 1 staff (minimum: 2)
   Severity: MEDIUM
 
-Pass 3 — Zero-shift staff:
+Pass 3: Zero-shift staff:
   ✗ Ladi: 0 shifts assigned
   Severity: HIGH
 
-Pass 4 — Shift imbalance:
+Pass 4: Shift imbalance:
   ⚠ Chidi: 18 shifts vs team avg 11.6 (+55%)
   Severity: LOW
 ```
@@ -426,7 +426,7 @@ User: "Who is working nights this week?"
 Extracted data: Week of Aug 11-17 night shift assignments
 
 LLM response: "This week's night shifts are distributed across
-  7 different staff — one person per night. Chidi starts Monday,
+  7 different staff - one person per night. Chidi starts Monday,
   followed by Musa, Ada, Nneka, Ibrahim, Ladi, and Kemi."
 ```
 

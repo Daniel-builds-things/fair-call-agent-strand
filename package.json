@@ -10,7 +10,6 @@
     "start": "next start",
     "demo": "tsx src/index.ts",
     "eval": "tsx src/eval/evaluate.ts",
-    "eval:html": "tsx scripts/generate_eval_html.ts",
     "test": "tsx src/eval/test_constraints.ts",
     "demo:llm": "tsx src/eval/demo-llm-parser.ts",
     "strands:demo": "tsx src/strands/index.ts",

@@ -1,10 +1,10 @@
-# Fair Call Agent — Agentic Shift Scheduling
+# Fair Call Agent: Agentic Shift Scheduling
 
-> **Devpost — AI Agent Orchestration Showcase** — Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
+> **Devpost: AI Agent Orchestration Showcase** - Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
 
 An agentic constraint-reasoning layer on top of a deterministic LRU scheduler, powered by the AWS Strands Agents SDK. Managers give natural language instructions; the agent parses, reasons about trade-offs, and produces schedules that honor constraints.
 
-**Now with 4 AI-powered interactive features**: post-schedule explanation, conflict detection & resolution, natural-language query, and predictive staffing analysis — all accessible directly in the web UI.
+**Now with 4 AI-powered interactive features**: post-schedule explanation, conflict detection & resolution, natural-language query, and predictive staffing analysis - all accessible directly in the web UI.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ npm run demo
 npm run eval
 ```
 
-Works without API keys — regex parsing and deterministic analysis provide full functionality. Set `GROQ_API_KEY` (or `OPENAI_API_KEY`) to enable optional LLM-powered semantic parsing and AI-enhanced analysis.
+Works without API keys. Regex parsing and deterministic analysis provide full functionality. Set `GROQ_API_KEY` (or `OPENAI_API_KEY`) to enable optional LLM-powered semantic parsing and AI-enhanced analysis.
 
 ## Architecture
 
@@ -91,18 +91,18 @@ See the full HTML report in the `eval-report/` directory (run `npm run eval:html
 
 ## 12 Evaluation Cases
 
-1. **Basic 8-Staff Clinic** — Standard scheduling, no constraints
-2. **Wedding Conflict** — Time-off handling
-3. **Weekend Availability** — Day-of-week constraints
-4. **Night-to-Morning** — Crossover prohibition
-5. **Max Shift Cap** — Individual workload limits
-6. **Pair Apart** — Inter-staff conflict resolution
-7. **Multi-Constraint Hospital** — 5 overlapping constraints
-8. **Understaffed Emergency** — Trade-offs with only 4 staff
-9. **Shift Preference Diversity** — 5 different preferences
-10. **No Back-to-Back Policy** — Organization-wide policy
-11. **Holiday Month** — Holiday-aware scheduling
-12. **Specific Shift Assignment** — Hard shift pinning
+1. **Basic 8-Staff Clinic**: Standard scheduling, no constraints
+2. **Wedding Conflict**: Time-off handling
+3. **Weekend Availability**: Day-of-week constraints
+4. **Night-to-Morning**: Crossover prohibition
+5. **Max Shift Cap**: Individual workload limits
+6. **Pair Apart**: Inter-staff conflict resolution
+7. **Multi-Constraint Hospital**: 5 overlapping constraints
+8. **Understaffed Emergency**: Trade-offs with only 4 staff
+9. **Shift Preference Diversity**: 5 different preferences
+10. **No Back-to-Back Policy**: Organization-wide policy
+11. **Holiday Month**: Holiday-aware scheduling
+12. **Specific Shift Assignment**: Hard shift pinning
 
 ## Project Structure
 
@@ -202,14 +202,14 @@ Each feature operates in **LLM-powered mode** (when `GROQ_API_KEY` or `OPENAI_AP
 
 ## Built On
 
-- [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro) — React/Vite/TypeScript shift scheduling app with LRU algorithm
-- [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python) — Agentic orchestration layer
-- [Groq](https://groq.com) — LLM-powered constraint parsing and AI analysis (`groq-sdk`)
-- [OpenAI](https://openai.com) — Alternative LLM provider (`openai`)
-- [Next.js](https://nextjs.org) — Web UI framework (app router)
-- date-fns — Date manipulation
-- Zod — Runtime type validation
-- TypeScript — Type safety throughout
+- [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro) - React/Vite/TypeScript shift scheduling app with LRU algorithm
+- [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python) - Agentic orchestration layer
+- [Groq](https://groq.com) - LLM-powered constraint parsing and AI analysis (`groq-sdk`)
+- [OpenAI](https://openai.com) - Alternative LLM provider (`openai`)
+- [Next.js](https://nextjs.org) - Web UI framework (app router)
+- date-fns - Date manipulation
+- Zod - Runtime type validation
+- TypeScript - Type safety throughout
 
 ## License
 

@@ -1,6 +1,6 @@
-# Reproduction Guide — Fair Call Agent
+# Reproduction Guide: Fair Call Agent
 
-> AI Agent Orchestration Showcase — Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
+> AI Agent Orchestration Showcase - Built on [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro)
 
 This guide walks you through running the entire evaluation suite and interactive AI features from a clean environment.
 
@@ -15,7 +15,7 @@ This guide walks you through running the entire evaluation suite and interactive
 | **OS** | macOS / Linux / WSL | Any Unix-like environment |
 | **API Keys** | Optional | `GROQ_API_KEY` or `OPENAI_API_KEY` for LLM-powered features |
 
-The entire project runs locally. Without API keys, all features fall back to deterministic analysis — no external services required.
+The entire project runs locally. Without API keys, all features fall back to deterministic analysis - no external services required.
 
 ---
 
@@ -35,15 +35,15 @@ npm install
 ```
 
 This installs:
-- `@strands-agents/sdk` (v1.16.0) — AWS Strands Agents SDK
-- `groq-sdk` (v0.33.0) — Groq LLM provider
-- `openai` (v6.49.0) — OpenAI LLM provider
-- `date-fns` (v3.6.0) — date manipulation
-- `next` (v14.2.x) — web UI framework
-- `react` / `react-dom` (v18.3.x) — UI library
-- `zod` (v4.5.x) — runtime type validation
-- `tsx` (v4.19.0) — TypeScript execution
-- `typescript` (v5.4.0) — type checking
+- `@strands-agents/sdk` (v1.16.0) - AWS Strands Agents SDK
+- `groq-sdk` (v0.33.0) - Groq LLM provider
+- `openai` (v6.49.0) - OpenAI LLM provider
+- `date-fns` (v3.6.0) - date manipulation
+- `next` (v14.2.x) - web UI framework
+- `react` / `react-dom` (v18.3.x) - UI library
+- `zod` (v4.5.x) - runtime type validation
+- `tsx` (v4.19.0) - TypeScript execution
+- `typescript` (v5.4.0) - type checking
 
 Expected output: ~50+ packages, ~30 seconds.
 
@@ -82,7 +82,7 @@ This is the **primary evaluation command**. It:
 
 ```
 ========================================
-  Fair Call Agent — Evaluation Summary
+  Fair Call Agent - Evaluation Summary
 ========================================
 
 Cases:    12
@@ -123,12 +123,12 @@ npm run dev
 
 Open `http://localhost:3000` in your browser. The UI provides:
 
-1. **Staff & Constraint Input** — Add staff names and type natural language constraints
-2. **Generate Schedule** — Run the constraint-aware scheduler
-3. **🧠 Explain Tab** — Per-staff "why" justifications for shift assignments
-4. **⚠️ Conflicts Tab** — Automatic conflict detection with resolution suggestions
-5. **💬 Query Tab** — Chat with your schedule ("Who's working nights this week?")
-6. **🔮 Predict Tab** — Burnout risk, understaffing alerts, hiring recommendations
+1. **Staff & Constraint Input**: Add staff names and type natural language constraints
+2. **Generate Schedule**: Run the constraint-aware scheduler
+3. **🧠 Explain Tab**: Per-staff "why" justifications for shift assignments
+4. **⚠️ Conflicts Tab**: Automatic conflict detection with resolution suggestions
+5. **💬 Query Tab**: Chat with your schedule ("Who's working nights this week?")
+6. **🔮 Predict Tab**: Burnout risk, understaffing alerts, hiring recommendations
 
 All four AI features work without an API key (deterministic fallback mode).
 
@@ -163,7 +163,7 @@ Then run the LLM demo to see side-by-side comparison:
 npm run demo:llm
 ```
 
-Without API keys, the app falls back to regex-only parsing and deterministic AI analysis — still works perfectly.
+Without API keys, the app falls back to regex-only parsing and deterministic AI analysis - still works perfectly.
 
 ---
 
@@ -272,6 +272,6 @@ npm run dev
 npm run strands:demo
 ```
 
-The `npm run eval` command demonstrates the **measured improvement** — the core scoring criterion. It runs both baseline and agent across 12 cases and prints the +45 point constraint satisfaction improvement.
+The `npm run eval` command demonstrates the **measured improvement** - the core scoring criterion. It runs both baseline and agent across 12 cases and prints the +45 point constraint satisfaction improvement.
 
-The **live UI** (`npm run dev`) is where the 4 AI features shine — judges can interact with Explain, Conflicts, Query, and Predict tabs in real time.
+The **live UI** (`npm run dev`) is where the 4 AI features shine - judges can interact with Explain, Conflicts, Query, and Predict tabs in real time.
