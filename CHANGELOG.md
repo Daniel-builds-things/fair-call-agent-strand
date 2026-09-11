@@ -140,6 +140,83 @@ The LLM correctly interprets negation where the regex parser fails. Both paths p
 
 ---
 
+## Iteration 7: AWS Strands Agents SDK Integration
+
+**Change**: Integrated the AWS Strands Agents SDK to provide agentic orchestration on top of the scheduling engine. The Strands agent wraps the scheduler as a tool, allowing managers to interact conversationally — describing staffing needs in natural language and receiving generated schedules without manually entering constraints into a form.
+
+**Design**: The Strands agent exposes `generate_schedule` as a tool. It parses the user's instructions, extracts relevant parameters (staff list, month, constraints), and calls the underlying scheduling engine. This adds a conversational layer on top of the existing constraint parser + scheduler pipeline.
+
+**Fallback**: If no LLM API key is configured, the Strands agent delegates to the regex constraint parser — the app works identically at $0 cost.
+
+---
+
+## Iteration 8: AI Schedule Explainer (🧠 Explain Tab)
+
+**Change**: Added a post-schedule explanation engine that answers the "why" question — *why did each person get their specific shifts?* This goes beyond the original `schedule-explainer.ts` (which computed fairness scores) by generating per-staff, LLM-powered justifications.
+
+**Design**: For each staff member, the engine:
+1. Identifies their assigned shifts and shift-type distribution (morning/afternoon/night)
+2. Maps assigned shifts back to constraints that affected them
+3. Computes fairness comparison (individual vs. team average)
+4. Uses the LLM to generate human-readable explanations for *why* each person received their schedule
+
+**Deterministic Fallback**: Without an LLM, the engine still produces per-staff breakdowns with constraint impact analysis and fairness comparison — just without the narrative generation.
+
+---
+
+## Iteration 9: AI Conflict Detection & Resolution (⚠️ Conflicts Tab)
+
+**Change**: Added a conflict detection engine that programmatically identifies scheduling issues and uses the LLM to suggest concrete resolutions.
+
+**Detected Conflict Types**:
+- **Time-off overlaps**: Staff scheduled during their requested time off
+- **Unfilled slots**: Understaffed shifts (below coverage minimum)
+- **Zero-shift staff**: Staff members with no assigned shifts
+- **Shift imbalances**: Staff with significantly more/fewer shifts than team average
+- **Contradictory pair constraints**: e.g., two staff marked both "pair_together" and "pair_apart"
+
+**Design**: The engine runs a multi-pass analysis over the schedule, categorizes each issue by severity, then uses the LLM to generate resolution suggestions that consider the full constraint context (not just "assign more people" but "if you move Ada to this slot, Chidi's time-off is still honored").
+
+**Deterministic Fallback**: All conflict detection works without LLM — only the resolution suggestions degrade to templated advice.
+
+---
+
+## Iteration 10: AI Schedule Query (💬 Query Tab)
+
+**Change**: Added a natural-language chat interface over the generated schedule, allowing managers to ask questions like:
+- "Who's working nights this week?"
+- "How many shifts did Ada get?"
+- "What's the average shifts per person?"
+- "Are there any conflicts?"
+
+**Design**:
+1. The query engine extracts relevant schedule statistics (shift counts, shift-type distributions, conflict flags)
+2. Passes the question + extracted data to the LLM for a natural-language answer
+3. Supports multi-turn conversation with follow-up suggestions
+
+This transforms the schedule from a static table into a conversational data source.
+
+**Deterministic Fallback**: Without LLM, the engine returns structured data tables (shift counts, averages) without narrative formatting.
+
+---
+
+## Iteration 11: AI Predictive Staffing Analysis (🔮 Predict Tab)
+
+**Change**: Added a forward-looking staffing health analysis that goes beyond the current schedule to predict future risks:
+
+**Analysis Categories**:
+- **Burnout Risk**: Identifies staff with high shift load, night-heavy schedules, or too many consecutive days
+- **Understaffing Alerts**: Flags shifts where coverage is below safe minimums
+- **Hiring Recommendations**: Suggests how many additional staff are needed to eliminate burnout/understaffing
+- **Constraint Optimization Tips**: Identifies constraints that could be relaxed to improve schedule health
+- **Overall Schedule Health Rating**: 🟢 (healthy) / 🟡 (moderate risk) / 🔴 (critical)
+
+**Design**: The engine computes quantitative metrics (consecutive-day counts, night-shift ratios, coverage gaps) then uses the LLM to synthesize these into actionable recommendations with priority rankings.
+
+**Deterministic Fallback**: All metrics are computed without LLM — only the narrative recommendations degrade to templated suggestions.
+
+---
+
 ## Final Results
 
 | Metric | Baseline | Agent | Δ |
@@ -151,6 +228,8 @@ The LLM correctly interprets negation where the regex parser fails. Both paths p
 | N→M Violations | 0 | 0 | 0 |
 
 **Key Finding**: The agent achieves 100% constraint satisfaction across all 12 evaluation cases while maintaining 100% coverage and fairness within 0.2 points of the baseline. The +45 percentage point improvement in constraint satisfaction is the primary measured improvement.
+
+**New in v2.0**: Four interactive AI features (Explain, Conflicts, Query, Predict) transform the static schedule into a conversational, self-analyzing tool — all with deterministic fallbacks that work without API keys.
 
 ---
 

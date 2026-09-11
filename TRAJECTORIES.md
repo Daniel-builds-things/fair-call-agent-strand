@@ -327,3 +327,150 @@ Agent:
   Kemi nights: 8/10 (80%)
   → 100% constraint satisfaction (preference honored above threshold)
 ```
+
+---
+
+## Trajectory 5: AI Schedule Explainer (🧠 Explain Tab)
+
+### Context
+After a schedule is generated with 8 staff for August 2025 and 5 constraints, the user clicks the **Explain** tab.
+
+### Step 1: Data Extraction
+```
+Schedule: 93 shifts across 8 staff
+  Ada: 11 shifts (4 morning, 4 afternoon, 3 night)
+  Chidi: 13 shifts (8 morning, 2 afternoon, 3 night)
+  Funke: 10 shifts (6 morning, 3 afternoon, 1 night)
+Constraints applied:
+  1. time_off: Ada, Aug 10-14
+  2. max_shifts: Chidi ≤ 18
+  3. preferred: Funke → morning
+  4. no_night_to_morning: Ibrahim
+  5. availability: Kemi → weekdays only
+```
+
+### Step 2: Per-Staff Analysis
+```
+For Ada:
+  - Shifts: 11 (team avg: 11.6) → slightly below average
+  - Constraint impact: Time-off removed 6 potential slots
+  - Fairness: Within 1 std of team mean → healthy
+
+For Chidi:
+  - Shifts: 13 (team avg: 11.6) → slightly above average
+  - Constraint impact: Morning preference pushed +5 morning shifts
+
+For Kemi:
+  - Shifts: 9 (team avg: 11.6) → below average
+  - Constraint impact: Weekend unavailability removed 18 slots
+```
+
+### Step 3: LLM-Generated Explanation
+```
+"Ada received 11 shifts, slightly below the team average of 11.6.
+ This is because her time-off request (Aug 10-14) removed 6 slots
+ from the pool. The scheduler compensated by distributing her load
+ across the remaining 7 staff, keeping everyone within 2 shifts of
+ the mean.
+
+  Chidi received 13 shifts with a strong morning bias (8/13),
+  honoring their stated preference.
+
+  Kemi's 9 shifts are below average because weekend unavailability
+  removes 18 of 93 total slots. This is not a fairness issue — it's
+  a direct consequence of reduced available days."
+```
+
+---
+
+## Trajectory 6: AI Conflict Detection (⚠️ Conflicts Tab)
+
+### Step 1: Conflict Scan
+```
+Pass 1 — Time-off violations:
+  ✗ Ada scheduled Aug 12 Night (requested time off Aug 10-14)
+  Severity: HIGH
+
+Pass 2 — Unfilled slots:
+  ✗ Aug 20 Night: only 1 staff (minimum: 2)
+  Severity: MEDIUM
+
+Pass 3 — Zero-shift staff:
+  ✗ Ladi: 0 shifts assigned
+  Severity: HIGH
+
+Pass 4 — Shift imbalance:
+  ⚠ Chidi: 18 shifts vs team avg 11.6 (+55%)
+  Severity: LOW
+```
+
+### Step 2: LLM Resolution Suggestions
+```
+Conflict: Ada scheduled during time-off (Aug 12 Night)
+  Suggestion: Move Ada's Aug 12 Night slot to Ladi, who has 0
+  shifts and is available that night. This resolves both the
+  time-off violation and the zero-shift issue simultaneously.
+
+Conflict: Aug 20 Night understaffed (1 staff, need 2)
+  Suggestion: Consider relaxing the no_back_to_back constraint
+  for one night, or hire a temporary staff member.
+```
+
+---
+
+## Trajectory 7: AI Schedule Query (💬 Query Tab)
+
+### Turn 1
+```
+User: "Who is working nights this week?"
+Extracted data: Week of Aug 11-17 night shift assignments
+
+LLM response: "This week's night shifts are distributed across
+  7 different staff — one person per night. Chidi starts Monday,
+  followed by Musa, Ada, Nneka, Ibrahim, Ladi, and Kemi."
+```
+
+### Turn 2 (Follow-up)
+```
+User: "How many total night shifts did Chidi get?"
+Extracted data: Chidi: Morning 8, Afternoon 2, Night 3
+
+LLM response: "Chidi received 3 night shifts out of 13 total
+  (23%). Given their morning preference (8 mornings), this
+  is a reasonable balance."
+```
+
+---
+
+## Trajectory 8: AI Predictive Staffing (🔮 Predict Tab)
+
+### Metric Computation
+```
+Burnout Analysis:
+  Chidi: 18 shifts, 8 consecutive days max → BURNOUT RISK 🔴
+  Ada: 11 shifts, 4 consecutive days max → Healthy 🟢
+  Ibrahim: 12 shifts, 5 consecutive days max → Moderate 🟡
+
+Coverage Analysis:
+  Night shifts: 1.3 avg staff (minimum: 2) → UNDERSTAFFED 🔴
+  Weekend: 1.0 avg staff → CRITICAL 🔴
+
+Hiring Recommendation:
+  Current: 4 staff, ~23 shifts each
+  Target: 6 staff, ~15 shifts each → Need 2 additional staff
+```
+
+### LLM Synthesis
+```
+Schedule Health: 🔴 CRITICAL
+
+Key Risks:
+1. Chidi burnout: 18 shifts with 8 consecutive days
+2. Night understaffing: 1.3 staff per slot (minimum: 2)
+3. Weekend vulnerability: single points of failure
+
+Recommendations:
+- Priority 1: Hire 2 staff to reduce individual load
+- Priority 2: Relax max_shifts on Chidi from 18 to 16
+- Priority 3: Consider weekend-only hire or on-call rotation
+```

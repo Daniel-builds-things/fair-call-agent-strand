@@ -4,6 +4,8 @@
 
 An agentic constraint-reasoning layer on top of a deterministic LRU scheduler, powered by the AWS Strands Agents SDK. Managers give natural language instructions; the agent parses, reasons about trade-offs, and produces schedules that honor constraints.
 
+**Now with 4 AI-powered interactive features**: post-schedule explanation, conflict detection & resolution, natural-language query, and predictive staffing analysis — all accessible directly in the web UI.
+
 ## Quick Start
 
 ```bash
@@ -17,7 +19,7 @@ npm run demo
 npm run eval
 ```
 
-Works without API keys — regex parsing provides full functionality. Set `GROQ_API_KEY` to enable optional LLM-powered semantic parsing for complex natural language constraints.
+Works without API keys — regex parsing and deterministic analysis provide full functionality. Set `GROQ_API_KEY` (or `OPENAI_API_KEY`) to enable optional LLM-powered semantic parsing and AI-enhanced analysis.
 
 ## Architecture
 
@@ -25,7 +27,7 @@ Works without API keys — regex parsing provides full functionality. Set `GROQ_
 🗣️ Natural Language    →    🧠 Constraint Parser    →    ⚙️ Constraint-Aware    →    📊 Schedule
    "Ada needs time          Pattern matching              Scheduler                   Output
     off Aug 14-16"          → 14 constraint               LRU + constraint            + 💡 Explainer
-                             types                        filtering + scoring
+                             types                        filtering + scoring         + 🔍 AI Features
 ```
 
 ### Components
@@ -34,13 +36,29 @@ Works without API keys — regex parsing provides full functionality. Set `GROQ_
 |---|---|---|
 | Baseline Scheduler | `src/lib/baseline-scheduler.ts` | Original LRU algorithm from Fair Call Pro |
 | Constraint Parser | `src/agents/constraint-parser.ts` | Natural language → structured constraints (regex) |
-| LLM Constraint Parser | `src/agents/llm-constraint-parser.ts` | Groq LLM-powered semantic parsing |
+| LLM Constraint Parser | `src/agents/llm-constraint-parser.ts` | Groq/OpenAI LLM-powered semantic parsing |
 | Enhanced Scheduler | `src/agents/enhanced-scheduler.ts` | Constraint-aware scheduling engine |
 | Schedule Explainer | `src/agents/schedule-explainer.ts` | Fairness analysis + insights + hot take |
+| **AI Schedule Explainer** | `src/agents/ai-features/ai-schedule-explainer.ts` | LLM-generated "why" for each person's shifts |
+| **AI Conflict Resolver** | `src/agents/ai-features/ai-conflict-resolver.ts` | Detects conflicts + suggests resolutions |
+| **AI Schedule Query** | `src/agents/ai-features/ai-schedule-query.ts` | Natural-language chat over generated schedules |
+| **AI Predictive Staffing** | `src/agents/ai-features/ai-predictive-staffing.ts` | Burnout risk, understaffing alerts, hiring tips |
 | Evaluation Suite | `src/eval/evaluate.ts` | 12-case benchmark: baseline vs agent |
 | Test Cases | `src/eval/cases.ts` | Realistic scenarios with constraints |
-| **Web UI** | `app/page.tsx` | Interactive live scheduler demo |
+| **Web UI** | `app/page.tsx` | Interactive live scheduler + 4 AI tabs |
 | **API Route** | `app/api/schedule/route.ts` | REST endpoint for schedule generation |
+| **AI API Route** | `app/api/ai/route.ts` | Unified endpoint for all 4 AI features |
+
+### AI Features (Interactive Tabs)
+
+After generating a schedule, four new tabs appear in the UI:
+
+| Tab | Icon | Function | LLM Role |
+|-----|------|----------|----------|
+| **Explain** | 🧠 | Per-staff breakdown of *why* each person got their specific shifts | Generates human-readable justifications, constraint impact analysis, and fairness comparison vs. team average |
+| **Conflicts** | ⚠️ | Detects overlaps, unfilled slots, and scheduling imbalances | Analyzes trade-offs between conflicting constraints and outputs actionable resolution suggestions |
+| **Query** | 💬 | Natural-language chat interface over the generated schedule | Answers questions like `"Who's working nights this week?"` or `"How many shifts did Ada get?"` with multi-turn conversation support |
+| **Predict** | 🔮 | Forward-looking staffing health check | Flags burnout risks, understaffing alerts, hiring recommendations, constraint optimization tips, and overall schedule health rating |
 
 ### Supported Constraint Types
 
@@ -92,34 +110,46 @@ See the full HTML report in the `eval-report/` directory (run `npm run eval:html
 fair-call-agent/
 ├── src/
 │   ├── lib/
-│   │   └── baseline-scheduler.ts   # Original LRU (our baseline)
+│   │   └── baseline-scheduler.ts        # Original LRU (our baseline)
 │   ├── agents/
-│   │   ├── constraint-parser.ts     # NL → constraints (regex)
-│   │   ├── llm-constraint-parser.ts # NL → constraints (Groq LLM)
-│   │   ├── enhanced-scheduler.ts    # Constraint-aware engine
-│   │   └── schedule-explainer.ts    # Analysis + insights
+│   │   ├── constraint-parser.ts          # NL → constraints (regex)
+│   │   ├── llm-constraint-parser.ts      # NL → constraints (Groq/OpenAI LLM)
+│   │   ├── enhanced-scheduler.ts         # Constraint-aware engine
+│   │   ├── schedule-explainer.ts         # Analysis + insights
+│   │   ├── scheduling-agent.ts           # Strands Agents SDK integration
+│   │   └── ai-features/
+│   │       ├── index.ts                  # AI features barrel export
+│   │       ├── ai-schedule-explainer.ts  # 🧠 LLM "why" explanations
+│   │       ├── ai-conflict-resolver.ts   # ⚠️ Conflict detection + resolution
+│   │       ├── ai-schedule-query.ts      # 💬 NL chat over schedules
+│   │       └── ai-predictive-staffing.ts # 🔮 Burnout & health analysis
 │   ├── eval/
-│   │   ├── cases.ts                 # 12 test cases
-│   │   └── evaluate.ts              # Benchmark runner
-│   ├── types.ts                     # Shared type definitions
-│   └── index.ts                     # Demo entry point
-├── app/                             # Next.js web UI
-│   ├── page.tsx                     # Interactive scheduler UI
-│   ├── layout.tsx                   # Root layout
-│   └── api/schedule/route.ts        # REST API for scheduling
-├── scheduler-lib/                   # Web-app copies (ESM-compatible)
+│   │   ├── cases.ts                      # 12 test cases
+│   │   └── evaluate.ts                   # Benchmark runner
+│   ├── strands/
+│   │   ├── index.ts                      # Strands agent demo
+│   │   └── demo-tool-only.ts             # Tool-only demo
+│   ├── types.ts                          # Shared type definitions
+│   └── index.ts                          # Demo entry point
+├── app/                                  # Next.js web UI
+│   ├── page.tsx                          # Interactive scheduler UI + 4 AI tabs
+│   ├── layout.tsx                        # Root layout
+│   └── api/
+│       ├── schedule/route.ts             # REST API for scheduling
+│       └── ai/route.ts                   # Unified AI features endpoint
+├── scheduler-lib/                        # Web-app copies (ESM-compatible)
 │   ├── baseline-scheduler.ts
 │   ├── constraint-parser.ts
 │   ├── llm-constraint-parser.ts
 │   ├── enhanced-scheduler.ts
 │   └── types.ts
 ├── scripts/
-│   └── generate_eval_html.ts        # HTML report generator
+│   └── generate_eval_html.ts             # HTML report generator
 ├── eval-report/
-│   └── index.html                   # Visual evaluation report
-├── CHANGELOG.md                     # Iterative improvement log
+│   └── index.html                        # Visual evaluation report
+├── CHANGELOG.md                          # Iterative improvement log
 ├── package.json
-├── next.config.mjs                  # Next.js configuration
+├── next.config.mjs                       # Next.js configuration
 └── tsconfig.json
 ```
 
@@ -154,12 +184,31 @@ console.log(explanation.fairnessAnalysis.overallScore); // 96/100
 console.log(explanation.hotTake); // "Key insight..."
 ```
 
+### 4. AI-Powered Interactive Features
+
+After a schedule is generated, users can interact with it through four AI-powered tabs:
+
+```typescript
+// POST /api/ai
+{
+  action: "explain" | "conflicts" | "query" | "predict",
+  schedule: { ... },
+  constraints: [ ... ],
+  query?: "Who is working nights this week?"   // only for "query" action
+}
+```
+
+Each feature operates in **LLM-powered mode** (when `GROQ_API_KEY` or `OPENAI_API_KEY` is set) or **deterministic fallback mode** (no API key required).
+
 ## Built On
 
 - [Fair Call Pro](https://github.com/Danielbuildsorigin/fair-call-pro) — React/Vite/TypeScript shift scheduling app with LRU algorithm
-- [Groq](https://groq.com) — LLM-powered constraint parsing (`groq-sdk`)
+- [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python) — Agentic orchestration layer
+- [Groq](https://groq.com) — LLM-powered constraint parsing and AI analysis (`groq-sdk`)
+- [OpenAI](https://openai.com) — Alternative LLM provider (`openai`)
 - [Next.js](https://nextjs.org) — Web UI framework (app router)
 - date-fns — Date manipulation
+- Zod — Runtime type validation
 - TypeScript — Type safety throughout
 
 ## License
