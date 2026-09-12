@@ -1046,27 +1046,37 @@ function PredictView({ predictions, loading, onPredict, error }: {
 
       {/* Recommendations */}
       <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Recommendations</h3>
-      {data.recommendations.map((r) => {
-        const priColor = r.priority === "high" ? "#ef4444" : r.priority === "medium" ? "#f59e0b" : "#10b981";
-        return (
-          <div key={r.id} style={{ padding: 14, marginBottom: 10, borderRadius: 8, background: "#fafafa", borderLeft: `4px solid ${priColor}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-              <strong style={{ fontSize: 14, textTransform: "capitalize" }}>{r.title}</strong>
-              <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: priColor + "20", color: priColor, fontWeight: 600 }}>{r.priority}</span>
-            </div>
-            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#555" }}>{r.description}</p>
-            <p style={{ margin: "0 0 8px", fontSize: 12, color: "#999" }}>Impact: {r.impact}</p>
-            <div>
-              <strong style={{ fontSize: 12 }}>Action items:</strong>
-              <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 12, color: "#555" }}>
-                {r.actionItems.map((a, i) => (
-                  <li key={i}>{a}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        );
-      })}
+      {data.recommendations.length === 0 ? (
+        <div style={{ padding: 20, background: "#f9fafb", borderRadius: 8, border: "1px dashed #d1d5db", textAlign: "center", minHeight: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "#9ca3af", fontSize: 13, margin: 0 }}>
+            No specific recommendations at this time. The schedule looks balanced.
+          </p>
+        </div>
+      ) : (
+        <div style={{ minHeight: 120, maxHeight: 500, overflowY: "auto" }}>
+          {data.recommendations.map((r) => {
+            const priColor = r.priority === "high" ? "#ef4444" : r.priority === "medium" ? "#f59e0b" : "#10b981";
+            return (
+              <div key={r.id} style={{ padding: 14, marginBottom: 10, borderRadius: 8, background: "#fafafa", borderLeft: `4px solid ${priColor}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <strong style={{ fontSize: 14, textTransform: "capitalize" }}>{r.title}</strong>
+                  <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: priColor + "20", color: priColor, fontWeight: 600 }}>{r.priority}</span>
+                </div>
+                <p style={{ margin: "0 0 6px", fontSize: 13, color: "#555" }}>{r.description}</p>
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: "#999" }}>Impact: {r.impact}</p>
+                <div>
+                  <strong style={{ fontSize: 12 }}>Action items:</strong>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 20, fontSize: 12, color: "#555" }}>
+                    {r.actionItems.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

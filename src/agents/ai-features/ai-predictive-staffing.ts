@@ -140,14 +140,14 @@ Return ONLY the JSON object.`;
     if (resolved.provider === "groq" && resolved.groq) {
       const response = await resolved.groq.chat.completions.create({
         messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-        model: resolved.model, temperature: 0.3, max_tokens: 4000,
+        model: resolved.model, temperature: 0.3, max_tokens: 8000,
       });
       return parsePredictiveResponse(response.choices[0]?.message?.content, detectedIssues, stats, assignments, month, startTime);
     }
     if (resolved.openai) {
       const response = await resolved.openai.chat.completions.create({
         messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-        model: resolved.model, temperature: 0.3, max_tokens: 4000,
+        model: resolved.model, temperature: 0.3, max_tokens: 8000,
       });
       return parsePredictiveResponse(response.choices[0]?.message?.content, detectedIssues, stats, assignments, month, startTime);
     }
@@ -167,9 +167,16 @@ function parsePredictiveResponse(
   startTime: number
 ): PredictiveStaffingResult {
   if (!content) return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
-  const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-  const parsed = JSON.parse(jsonStr);
-  return { ...parsed, processingTimeMs: Date.now() - startTime };
+
+  try {
+    const jsonStr = content.replace(/^```json\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    const parsed = JSON.parse(jsonStr);
+    return { ...parsed, processingTimeMs: Date.now() - startTime };
+  } catch (err) {
+    console.error("[AI Predictive] Failed to parse LLM response, using fallback:", err);
+    console.error("[AI Predictive] Raw response:", content?.substring(0, 500));
+    return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
+  }
 }
 
 // ─── Programmatic Issue Detection ─────────────────────────────────────────────
