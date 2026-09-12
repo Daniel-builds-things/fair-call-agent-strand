@@ -4,7 +4,56 @@
 // trade-offs — not just list numbers.
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { StaffMember, Constraint, DayAssignment, StaffStats } from "../../../scheduler-lib/types";
+
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+// Supports Groq, OpenAI, and any OpenAI-compatible provider (NetMind, etc.).
+// Priority: GROQ_API_KEY > OPENAI_API_KEY + OPENAI_BASE_URL > OPENAI_API_KEY only.
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  // Priority 1: Groq
+  if (groqApiKey) {
+    return {
+      provider: "groq",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      groq: new Groq({ apiKey: groqApiKey }),
+    };
+  }
+
+  // Priority 2: OpenAI-compatible (NetMind, etc.) — key + custom base URL
+  if (openaiApiKey && openaiBaseUrl) {
+    return {
+      provider: "netmind",
+      model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }),
+    };
+  }
+
+  // Priority 3: OpenAI.com — key only
+  if (openaiApiKey) {
+    return {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey }),
+    };
+  }
+
+  return null;
+}
 
 export interface AssignmentExplanation {
   staffId: string;
@@ -36,13 +85,11 @@ export async function explainScheduleWithAI(
   holidays: string[] = []
 ): Promise<ScheduleExplanationResult> {
   const startTime = Date.now();
-  const apiKey = process.env.GROQ_API_KEY;
+  const resolved = resolveLLMProvider();
 
-  if (!apiKey) {
+  if (!resolved) {
     return generateFallbackExplanation(assignments, stats, constraints, month);
   }
-
-  const groq = new Groq({ apiKey });
 
   // Build a per-staff assignment summary
   const staffAssignments = stats.map((s) => {
@@ -128,32 +175,55 @@ Return a JSON object with this exact shape:
 Return ONLY the JSON object.`;
 
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 4000,
-    });
-
-    const content = response.choices[0]?.message?.content?.trim();
-    if (!content) {
-      return generateFallbackExplanation(assignments, stats, constraints, month);
+    if (resolved.provider === "groq" && resolved.groq) {
+      const response = await resolved.groq.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0.3,
+        max_tokens: 4000,
+      });
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return generateFallbackExplanation(assignments, stats, constraints, month);
+      return parseAndReturn(content, assignments, stats, constraints, month, startTime);
     }
-
-    const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    const parsed = JSON.parse(jsonStr);
-
-    return {
-      ...parsed,
-      processingTimeMs: Date.now() - startTime,
-    };
+    if (resolved.openai) {
+      const response = await resolved.openai.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0.3,
+        max_tokens: 4000,
+      });
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return generateFallbackExplanation(assignments, stats, constraints, month);
+      return parseAndReturn(content, assignments, stats, constraints, month, startTime);
+    }
+    return generateFallbackExplanation(assignments, stats, constraints, month);
   } catch (err) {
     console.error("[AI Explainer] Failed, using fallback:", err);
     return generateFallbackExplanation(assignments, stats, constraints, month);
   }
+}
+
+function parseAndReturn(
+  content: string,
+  assignments: DayAssignment[],
+  stats: StaffStats[],
+  constraints: Constraint[],
+  month: string,
+  startTime: number
+): ScheduleExplanationResult {
+  const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonStr);
+  return {
+    ...parsed,
+    processingTimeMs: Date.now() - startTime,
+  };
 }
 
 /**

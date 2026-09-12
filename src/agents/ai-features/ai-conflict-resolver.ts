@@ -4,7 +4,52 @@
 // suggests concrete, actionable alternatives.
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { StaffMember, Constraint, DayAssignment, StaffStats, ScheduleError } from "../../../scheduler-lib/types";
+
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+// Supports Groq, OpenAI, and any OpenAI-compatible provider (NetMind, etc.).
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  if (groqApiKey) {
+    return {
+      provider: "groq",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      groq: new Groq({ apiKey: groqApiKey }),
+    };
+  }
+
+  if (openaiApiKey && openaiBaseUrl) {
+    return {
+      provider: "netmind",
+      model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }),
+    };
+  }
+
+  if (openaiApiKey) {
+    return {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey }),
+    };
+  }
+
+  return null;
+}
 
 export interface ConflictAnalysis {
   id: string;
@@ -35,7 +80,7 @@ export async function analyzeConflictsWithAI(
   month: string
 ): Promise<ConflictResolutionResult> {
   const startTime = Date.now();
-  const apiKey = process.env.GROQ_API_KEY;
+  const resolved = resolveLLMProvider();
 
   // First, detect conflicts programmatically
   const detectedConflicts = detectConflicts(assignments, stats, constraints, errors, staff);
@@ -48,15 +93,13 @@ export async function analyzeConflictsWithAI(
     };
   }
 
-  if (!apiKey) {
+  if (!resolved) {
     return {
       conflicts: generateFallbackSuggestions(detectedConflicts),
       overallRisk: detectedConflicts.some((c) => c.severity === "high") ? "high" : "medium",
       processingTimeMs: Date.now() - startTime,
     };
   }
-
-  const groq = new Groq({ apiKey });
 
   const systemPrompt = `You are a Schedule Conflict Resolution AI. When scheduling constraints conflict, you analyze the trade-offs and suggest concrete, actionable alternatives.
 
@@ -110,40 +153,62 @@ Return a JSON object:
 Return ONLY the JSON object.`;
 
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 4000,
-    });
+    if (resolved.provider === "groq" && resolved.groq) {
+      const response = await resolved.groq.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0.3,
+        max_tokens: 4000,
+      });
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return fallbackResult(detectedConflicts, startTime);
 
-    const content = response.choices[0]?.message?.content?.trim();
-    if (!content) {
+      const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+      const parsed = JSON.parse(jsonStr);
       return {
-        conflicts: generateFallbackSuggestions(detectedConflicts),
-        overallRisk: "medium",
+        ...parsed,
         processingTimeMs: Date.now() - startTime,
       };
     }
+    if (resolved.openai) {
+      const response = await resolved.openai.chat.completions.create({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0.3,
+        max_tokens: 4000,
+      });
+      const content = response.choices[0]?.message?.content?.trim();
+      if (!content) return fallbackResult(detectedConflicts, startTime);
 
-    const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    const parsed = JSON.parse(jsonStr);
-
-    return {
-      ...parsed,
-      processingTimeMs: Date.now() - startTime,
-    };
+      const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+      const parsed = JSON.parse(jsonStr);
+      return {
+        ...parsed,
+        processingTimeMs: Date.now() - startTime,
+      };
+    }
+    return fallbackResult(detectedConflicts, startTime);
   } catch (err) {
     console.error("[AI Conflict Resolver] Failed, using fallback:", err);
-    return {
-      conflicts: generateFallbackSuggestions(detectedConflicts),
-      overallRisk: "medium",
-      processingTimeMs: Date.now() - startTime,
-    };
+    return fallbackResult(detectedConflicts, startTime);
   }
+}
+
+function fallbackResult(
+  detectedConflicts: RawConflict[],
+  startTime: number
+): ConflictResolutionResult {
+  return {
+    conflicts: generateFallbackSuggestions(detectedConflicts),
+    overallRisk: detectedConflicts.some((c) => c.severity === "high") ? "high" : "medium",
+    processingTimeMs: Date.now() - startTime,
+  };
 }
 
 // ─── Programmatic Conflict Detection ──────────────────────────────────────────

@@ -1,9 +1,57 @@
-// ─── LLM Constraint Parser: Groq-powered Natural Language → Structured Constraints ─
-// Uses Groq's LLM to semantically understand scheduling constraints.
-// Falls back to regex parser when GROQ_API_KEY is not configured.
+// ─── LLM Constraint Parser: Provider-agnostic Natural Language → Structured Constraints ─
+// Supports Groq, OpenAI, and any OpenAI-compatible provider (NetMind, etc.).
+// Priority: GROQ_API_KEY > OPENAI_API_KEY + OPENAI_BASE_URL > OPENAI_API_KEY only.
+// Falls back to regex parser when no LLM key is configured.
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { Constraint, StaffMember } from "../types.js";
+
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  // Priority 1: Groq
+  if (groqApiKey) {
+    return {
+      provider: "groq",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      groq: new Groq({ apiKey: groqApiKey }),
+    };
+  }
+
+  // Priority 2: OpenAI-compatible (NetMind, etc.) — key + custom base URL
+  if (openaiApiKey && openaiBaseUrl) {
+    return {
+      provider: "netmind",
+      model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }),
+    };
+  }
+
+  // Priority 3: OpenAI.com — key only
+  if (openaiApiKey) {
+    return {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey }),
+    };
+  }
+
+  return null;
+}
 
 let constraintCounter = 0;
 function nextId(): string {
@@ -72,12 +120,10 @@ export async function parseConstraintsWithLLM(
   staff: StaffMember[],
   month: Date
 ): Promise<Constraint[]> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
+  const resolved = resolveLLMProvider();
+  if (!resolved) {
     return []; // No API key, caller should fall back to regex
   }
-
-  const groq = new Groq({ apiKey });
 
   const staffList = staff.map((s) => s.name).join(", ");
   const monthStr = month.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -91,17 +137,32 @@ ${requests.map((r, i) => `${i + 1}. "${r}"`).join("\n")}
 Return a JSON array only.`;
 
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      max_tokens: 2000,
-    });
+    let content: string | undefined;
 
-    const content = response.choices[0]?.message?.content?.trim();
+    if (resolved.provider === "groq" && resolved.groq) {
+      const response = await resolved.groq.chat.completions.create({
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0,
+        max_tokens: 2000,
+      });
+      content = response.choices[0]?.message?.content?.trim();
+    } else if (resolved.openai) {
+      const response = await resolved.openai.chat.completions.create({
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+        model: resolved.model,
+        temperature: 0,
+        max_tokens: 2000,
+      });
+      content = response.choices[0]?.message?.content?.trim();
+    }
+
     if (!content) return [];
 
     // Strip markdown code fences if present
@@ -157,8 +218,8 @@ Return a JSON array only.`;
 }
 
 /**
- * Check if LLM parser is available (API key configured).
+ * Check if LLM parser is available (any provider configured).
  */
 export function isLLMAvailable(): boolean {
-  return !!process.env.GROQ_API_KEY;
+  return !!resolveLLMProvider();
 }

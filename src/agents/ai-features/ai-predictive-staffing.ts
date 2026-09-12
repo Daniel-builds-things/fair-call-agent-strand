@@ -7,7 +7,36 @@
 //   - Constraint optimization tips
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { StaffMember, Constraint, DayAssignment, StaffStats, ScheduleError } from "../../../scheduler-lib/types";
+
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  if (groqApiKey) {
+    return { provider: "groq", model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile", groq: new Groq({ apiKey: groqApiKey }) };
+  }
+  if (openaiApiKey && openaiBaseUrl) {
+    return { provider: "netmind", model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini", openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }) };
+  }
+  if (openaiApiKey) {
+    return { provider: "openai", model: "gpt-4o-mini", openai: new OpenAI({ apiKey: openaiApiKey }) };
+  }
+  return null;
+}
 
 export interface StaffingRecommendation {
   id: string;
@@ -40,16 +69,14 @@ export async function predictStaffingWithAI(
   holidays: string[] = []
 ): Promise<PredictiveStaffingResult> {
   const startTime = Date.now();
-  const apiKey = process.env.GROQ_API_KEY;
+  const resolved = resolveLLMProvider();
 
   // Detect issues programmatically first
   const detectedIssues = detectStaffingIssues(assignments, stats, constraints, errors, staff);
 
-  if (!apiKey) {
+  if (!resolved) {
     return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
   }
-
-  const groq = new Groq({ apiKey });
 
   const systemPrompt = `You are a Predictive Staffing AI. Analyze schedules and provide forward-looking recommendations to improve staffing, reduce burnout risk, and optimize constraint usage.
 
@@ -110,32 +137,39 @@ Return a JSON object:
 Return ONLY the JSON object.`;
 
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.3,
-      max_tokens: 4000,
-    });
-
-    const content = response.choices[0]?.message?.content?.trim();
-    if (!content) {
-      return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
+    if (resolved.provider === "groq" && resolved.groq) {
+      const response = await resolved.groq.chat.completions.create({
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        model: resolved.model, temperature: 0.3, max_tokens: 4000,
+      });
+      return parsePredictiveResponse(response.choices[0]?.message?.content, detectedIssues, stats, assignments, month, startTime);
     }
-
-    const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    const parsed = JSON.parse(jsonStr);
-
-    return {
-      ...parsed,
-      processingTimeMs: Date.now() - startTime,
-    };
+    if (resolved.openai) {
+      const response = await resolved.openai.chat.completions.create({
+        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
+        model: resolved.model, temperature: 0.3, max_tokens: 4000,
+      });
+      return parsePredictiveResponse(response.choices[0]?.message?.content, detectedIssues, stats, assignments, month, startTime);
+    }
+    return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
   } catch (err) {
     console.error("[AI Predictive] Failed, using fallback:", err);
     return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
   }
+}
+
+function parsePredictiveResponse(
+  content: string | undefined | null,
+  detectedIssues: DetectedIssue[],
+  stats: StaffStats[],
+  assignments: DayAssignment[],
+  month: string,
+  startTime: number
+): PredictiveStaffingResult {
+  if (!content) return generateFallbackRecommendations(detectedIssues, stats, assignments, month);
+  const jsonStr = content.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+  const parsed = JSON.parse(jsonStr);
+  return { ...parsed, processingTimeMs: Date.now() - startTime };
 }
 
 // ─── Programmatic Issue Detection ─────────────────────────────────────────────
