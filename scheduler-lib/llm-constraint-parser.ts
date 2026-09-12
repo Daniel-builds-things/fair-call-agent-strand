@@ -1,9 +1,59 @@
-// ─── LLM Constraint Parser: Groq-powered Natural Language → Structured Constraints ─
-// Uses Groq's LLM to semantically understand scheduling constraints.
-// Falls back to regex parser when GROQ_API_KEY is not configured.
+// ─── LLM Constraint Parser: Provider-agnostic Natural Language → Structured Constraints ─
+// Supports Groq, OpenAI, and any OpenAI-compatible provider (NetMind, etc.).
+// Priority: GROQ_API_KEY > OPENAI_API_KEY + OPENAI_BASE_URL > OPENAI_API_KEY only.
+// Falls back to regex parser when no LLM key is configured.
 
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 import type { Constraint, StaffMember } from "./types";
+
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  // Priority 1: Groq
+  if (groqApiKey) {
+    return {
+      provider: "groq",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      groq: new Groq({ apiKey: groqApiKey }),
+    };
+  }
+
+  // Priority 2: OpenAI-compatible (NetMind, etc.) — key + custom base URL
+  if (openaiApiKey && openaiBaseUrl) {
+    return {
+      provider: "netmind",
+      model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }),
+    };
+  }
+
+  // Priority 3: OpenAI.com — key only
+  if (openaiApiKey) {
+    return {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey }),
+    };
+  }
+
+  return null;
+}
+
+// ─── Constraint Parsing ───────────────────────────────────────────────────────
 
 let constraintCounter = 0;
 function nextId(): string {
@@ -69,7 +119,7 @@ Return ONLY a JSON array of constraint objects. If you cannot parse a constraint
 Do NOT include any text outside the JSON array.`;
 
 /**
- * Parse constraints using Groq LLM.
+ * Parse constraints using LLM (Groq, OpenAI, or compatible).
  * Returns structured Constraint objects.
  */
 export async function parseConstraintsWithLLM(
@@ -77,12 +127,10 @@ export async function parseConstraintsWithLLM(
   staff: StaffMember[],
   month: Date
 ): Promise<Constraint[]> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    return []; // No API key, caller should fall back to regex
+  const resolved = resolveLLMProvider();
+  if (!resolved) {
+    return []; // No API key configured, caller should fall back to regex
   }
-
-  const groq = new Groq({ apiKey });
 
   const staffList = staff.map((s) => s.name).join(", ");
   const monthStr = month.toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -95,18 +143,20 @@ ${requests.map((r, i) => `${i + 1}. "${r}"`).join("\n")}
 
 Return a JSON array only.`;
 
-  try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      max_tokens: 2000,
-    });
+  const messages = [
+    { role: "system" as const, content: SYSTEM_PROMPT },
+    { role: "user" as const, content: userPrompt },
+  ];
 
-    const content = response.choices[0]?.message?.content?.trim();
+  try {
+    let content: string | undefined;
+
+    if (resolved.provider === "groq" && resolved.groq) {
+      content = await callGroq(resolved.groq, resolved.model, messages);
+    } else if (resolved.openai) {
+      content = await callOpenAI(resolved.openai, resolved.model, messages);
+    }
+
     if (!content) return [];
 
     // Strip markdown code fences if present
@@ -161,9 +211,37 @@ Return a JSON array only.`;
   }
 }
 
+async function callGroq(
+  groq: Groq,
+  model: string,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>
+): Promise<string | undefined> {
+  const response = await groq.chat.completions.create({
+    messages,
+    model,
+    temperature: 0,
+    max_tokens: 2000,
+  });
+  return response.choices[0]?.message?.content?.trim();
+}
+
+async function callOpenAI(
+  openai: OpenAI,
+  model: string,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>
+): Promise<string | undefined> {
+  const response = await openai.chat.completions.create({
+    messages,
+    model,
+    temperature: 0,
+    max_tokens: 2000,
+  });
+  return response.choices[0]?.message?.content?.trim();
+}
+
 /**
- * Check if LLM parser is available (API key configured).
+ * Check if LLM parser is available (any provider configured).
  */
 export function isLLMAvailable(): boolean {
-  return !!process.env.GROQ_API_KEY;
+  return !!resolveLLMProvider();
 }
