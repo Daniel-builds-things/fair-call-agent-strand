@@ -18,6 +18,54 @@ export interface ScheduleQueryResult {
   processingTimeMs: number;
 }
 
+// ─── Provider Resolution Layer ────────────────────────────────────────────────
+// Supports Groq, OpenAI, and any OpenAI-compatible provider (NetMind, etc.).
+// Priority: GROQ_API_KEY > OPENAI_API_KEY + OPENAI_BASE_URL > OPENAI_API_KEY only.
+
+type LLMProvider = "groq" | "openai" | "netmind";
+
+interface ResolvedProvider {
+  provider: LLMProvider;
+  model: string;
+  groq?: Groq;
+  openai?: OpenAI;
+}
+
+function resolveLLMProvider(): ResolvedProvider | null {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+
+  // Priority 1: Groq
+  if (groqApiKey) {
+    return {
+      provider: "groq",
+      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      groq: new Groq({ apiKey: groqApiKey }),
+    };
+  }
+
+  // Priority 2: OpenAI-compatible (NetMind, etc.) — key + custom base URL
+  if (openaiApiKey && openaiBaseUrl) {
+    return {
+      provider: "netmind",
+      model: process.env.OPENAI_MODEL_ID || "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey, baseURL: openaiBaseUrl }),
+    };
+  }
+
+  // Priority 3: OpenAI.com — key only
+  if (openaiApiKey) {
+    return {
+      provider: "openai",
+      model: "gpt-4o-mini",
+      openai: new OpenAI({ apiKey: openaiApiKey }),
+    };
+  }
+
+  return null;
+}
+
 /**
  * Answer natural language questions about a generated schedule.
  */
@@ -31,10 +79,9 @@ export async function queryScheduleWithAI(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = []
 ): Promise<ScheduleQueryResult> {
   const startTime = Date.now();
-  const groqApiKey = process.env.GROQ_API_KEY;
-  const openaiApiKey = process.env.OPENAI_API_KEY;
+  const resolved = resolveLLMProvider();
 
-  if (!groqApiKey && !openaiApiKey) {
+  if (!resolved) {
     return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
   }
 
@@ -103,21 +150,22 @@ Return ONLY the JSON object.`;
   ];
 
   try {
-    // Try Groq first if available
-    if (groqApiKey) {
-      const groq = new Groq({ apiKey: groqApiKey });
-      return await callGroq(groq, messages, query, assignments, stats, constraints, staff, month, startTime);
+    if (resolved.provider === "groq" && resolved.groq) {
+      return await callGroq(resolved.groq, resolved.model, messages, query, assignments, stats, constraints, staff, month, startTime);
     }
-    // Fallback to OpenAI
-    return await callOpenAI(openaiApiKey!, messages, query, assignments, stats, constraints, staff, month, startTime);
+    if (resolved.openai) {
+      return await callOpenAI(resolved.openai, resolved.model, messages, query, assignments, stats, constraints, staff, month, startTime);
+    }
+    return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
   } catch (err) {
-    console.error("[AI Query] Failed, using fallback:", err);
+    console.error("[AI Query] LLM call failed, using fallback:", err);
     return generateFallbackQueryAnswer(query, assignments, stats, constraints, staff, month);
   }
 }
 
 async function callGroq(
   groq: Groq,
+  model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   query: string,
   assignments: DayAssignment[],
@@ -129,7 +177,7 @@ async function callGroq(
 ): Promise<ScheduleQueryResult> {
   const response = await groq.chat.completions.create({
     messages,
-    model: "llama-3.3-70b-versatile",
+    model,
     temperature: 0.2,
     max_tokens: 1500,
   });
@@ -138,7 +186,8 @@ async function callGroq(
 }
 
 async function callOpenAI(
-  apiKey: string,
+  openai: OpenAI,
+  model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   query: string,
   assignments: DayAssignment[],
@@ -148,10 +197,9 @@ async function callOpenAI(
   month: string,
   startTime: number
 ): Promise<ScheduleQueryResult> {
-  const openai = new OpenAI({ apiKey });
   const response = await openai.chat.completions.create({
     messages,
-    model: "gpt-4o-mini",
+    model,
     temperature: 0.2,
     max_tokens: 1500,
   });
